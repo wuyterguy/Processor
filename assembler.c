@@ -1,0 +1,191 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <ctype.h>
+#include <string.h>
+
+#define MAX_LEXEME_SIZE 100
+#define UNUSEING_COMMAND_NUMBER -67
+
+#define HLT -2
+#define PUSH 0
+#define PUSH_FROM_REGISTER 10
+
+//#define COMMAND_SIZE = sizeof(int)
+//#define ARGUMENT_SIZE = sizeof(double)
+//#define ARGUMENT_SPECIFIER = "%d"
+
+enum {MAIN_NORMAL = 0, MAIN_CODE_BUFFER_ERROR = 1,
+      MAIN_CODE_SEGMENT_ERROR = 2};                     // return of main()
+
+#define Print_error_message(message, object)                                         \
+    fprintf(stderr, "%s(): %s - %s, line %d\n", __func__, message, object, __LINE__);
+
+struct Operation_t {
+    int operation_number;
+    const char* operation_name;
+    int arguments_count;
+};
+
+struct Register_t {
+    int register_number;
+    const char* register_name;
+};
+
+Operation_t Operations[] = {{HLT /*-2*/, "HLT", 0}, {-1, "OUT", 0}, {PUSH /*0*/, "PUSH", 1},
+                            {1, "ADD", 0}, {2, "SUB", 0}, {3, "MUL", 0}, {4, "DIV", 0},
+                            /*{PUSH_FROM_REGISTER, "PUSH", 1},*/ {11, "SET", 1}, {20, "JUMP", 1},
+                            {21, "JA", 1}, {22, "JAE", 1}, {23, "JB", 1},
+                            {24, "JBE", 1}, {25, "JE", 1}, {26, "JNE", 1}};
+
+Register_t Registers[] = {{1, "AX"}, {2, "BX"}, {3, "CX"}, {4, "DX"}};
+
+char* GetCodeBuffer(const char* filename);
+
+int MakeCodeFile(const char* filename, char* code_buffer);
+
+int GetArgument(char* lexeme, int registers_count, int last_command, FILE* code_file);
+
+int GetCommand(char* lexeme, int operations_count, int* p_next_is_argument);
+
+int InDigit(char* lexeme);
+
+int main() {
+    char* code_buffer = GetCodeBuffer("text_commands.txt");  // TODO get filename from argv or use console
+    if (code_buffer == NULL)
+        return MAIN_CODE_BUFFER_ERROR;
+
+    int make_code_res = MakeCodeFile("code.bin", code_buffer);
+}
+
+
+char* GetCodeBuffer(const char* filename) {
+    assert(filename != NULL);
+
+    struct stat file_stat = {};
+    stat(filename, &file_stat);
+
+    char* buffer = (char*)calloc(file_stat.st_size, sizeof(char));
+    if (buffer == NULL) {
+        Print_error_message("Failed to allocate memory", "buffer");
+        return NULL;
+    }
+
+    int file_descriptor = open(filename, O_RDONLY);
+    if (file_descriptor < 0) {
+        Print_error_message("Failed to open with mode O_RDONLY", filename);
+        free(buffer);
+        return NULL;
+    }
+
+    size_t text_size = read(file_descriptor, buffer, file_stat.st_size);
+    if (text_size < 0) {
+        Print_error_message("Failed to read", filename);
+        free(buffer);
+        close(file_descriptor);
+        return NULL;
+    }
+    buffer[text_size] = '\0';
+
+    close(file_descriptor);
+
+    return buffer;
+}
+
+
+int MakeCodeFile(const char* filename, char* code_buffer) { // REVIEW split on funk for args and for commands
+    FILE* code_file = fopen(filename, "wb");
+    if (code_file == NULL) {
+        Print_error_message("Failed to open with \"wb\" permission", filename);
+        return 1;
+    }
+
+    char lexeme[MAX_LEXEME_SIZE] = {};
+    int byte_code = 0;
+    size_t offset = 0;
+    size_t read_symbols_count = 0;
+    int registers_count = sizeof(Registers) / sizeof(Register_t);
+    int operations_count = sizeof(Operations) / sizeof(Operation_t);
+    int next_is_argument = 0;
+    int last_command = HLT;
+
+    while(sscanf(code_buffer + offset, "%s%n", lexeme, &read_symbols_count) > 0) {
+        offset += read_symbols_count;
+
+        if (next_is_argument > 0) {
+            byte_code = GetArgument(lexeme, registers_count, last_command, code_file);
+            next_is_argument--;
+        }
+        else {
+            byte_code = GetCommand(lexeme, operations_count, &next_is_argument);
+            if (byte_code == UNUSEING_COMMAND_NUMBER) {
+                printf("Unknown command with name %s\n\n", lexeme);
+                fclose(code_file);
+                return 1;
+            }
+
+            last_command = byte_code;
+        }
+
+        fwrite(&byte_code, sizeof(int), 1, code_file);
+    }
+
+    fclose(code_file);
+    return 0;
+}
+
+
+int GetArgument(char* lexeme, int registers_count, int last_command, FILE* code_file) {
+    for (int i_reg = 0; i_reg < registers_count; i_reg++) {
+        if (strncmp(Registers[i_reg].register_name, lexeme, MAX_LEXEME_SIZE) == 0) {
+            if (last_command == PUSH) {
+                int byte_code = PUSH_FROM_REGISTER;
+                fseek(code_file, -sizeof(int), SEEK_END);
+                fwrite(&byte_code, sizeof(int), 1, code_file);
+            }
+            return Registers[i_reg].register_number;
+        }
+    }
+
+    return InDigit(lexeme);
+}
+
+
+int GetCommand(char* lexeme, int operations_count, int* p_next_is_argument) {
+    for (int i_op = 0; i_op < operations_count; i_op++) {
+        if (strncmp(Operations[i_op].operation_name, lexeme, MAX_LEXEME_SIZE) == 0) {
+            *p_next_is_argument = Operations[i_op].arguments_count;
+            return Operations[i_op].operation_number;
+        }
+    }
+
+    return UNUSEING_COMMAND_NUMBER;
+}
+
+
+int InDigit(char* lexeme) {
+    assert(lexeme != NULL);
+
+    int sign = 1;
+    int digit = 0;
+
+    switch (*lexeme) {
+        case '-': sign = -1; break;
+        case '\0': return 0; break;
+        default:
+            if (isdigit(*lexeme))
+                digit = *lexeme - '0';
+            else
+                return 0;
+            break;
+    }
+
+    for (char* in_lexeme_ptr = lexeme + 1; isdigit(*in_lexeme_ptr) && (*in_lexeme_ptr != '\0');
+         in_lexeme_ptr++) {
+        digit = (digit * 10) + (*in_lexeme_ptr - '0');
+    }
+
+    return sign * digit;
+}
