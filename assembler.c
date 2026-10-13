@@ -7,38 +7,49 @@
 #include <string.h>
 
 #define MAX_LEXEME_SIZE 100
+#define MAX_LABELS_COUNT 100
 #define UNUSEING_COMMAND_NUMBER -67
+#define ITERATING_COUNT 2
 
 #define HLT -2
 #define PUSH 0
 #define PUSH_FROM_REGISTER 10
+#define JUMP 20
+#define JNE 26
 
 //#define COMMAND_SIZE = sizeof(int)
 //#define ARGUMENT_SIZE = sizeof(double)
 //#define ARGUMENT_SPECIFIER = "%d"
 
 enum {MAIN_NORMAL = 0, MAIN_CODE_BUFFER_ERROR = 1,
-      MAIN_CODE_SEGMENT_ERROR = 2};                     // return of main()
+      MAIN_CODE_SEGMENT_ERROR = 2};                            // return of main()
+typedef enum {SET_LABEL_NORMAL = 0, SET_LABEL_MEMORY_ERROR = 1,
+              SET_LABEL_IDENTIFICATION_ERROR} Set_label_res_t; // return of SetLabel()
 
 #define Print_error_message(message, object)                                         \
-    fprintf(stderr, "%s(): %s - %s, line %d\n", __func__, message, object, __LINE__);
+    fprintf(stderr, "%s: %s(): %s - %s, line %d\n", __FILE__, __func__, message, object, __LINE__);
 
 struct Operation_t {
     int operation_number;
-    const char* operation_name;
+    const char operation_name[MAX_LEXEME_SIZE];
     int arguments_count;
 };
 
 struct Register_t {
     int register_number;
-    const char* register_name;
+    const char register_name[MAX_LEXEME_SIZE];
+};
+
+struct Label_t {
+    ssize_t label_position;
+    char label_name[MAX_LEXEME_SIZE];
 };
 
 Operation_t Operations[] = {{HLT /*-2*/, "HLT", 0}, {-1, "OUT", 0}, {PUSH /*0*/, "PUSH", 1},
                             {1, "ADD", 0}, {2, "SUB", 0}, {3, "MUL", 0}, {4, "DIV", 0},
-                            /*{PUSH_FROM_REGISTER, "PUSH", 1},*/ {11, "SET", 1}, {20, "JUMP", 1},
+                            /*{PUSH_FROM_REGISTER, "PUSH", 1},*/ {11, "SET", 1}, {JUMP, "JUMP", 1},
                             {21, "JA", 1}, {22, "JAE", 1}, {23, "JB", 1},
-                            {24, "JBE", 1}, {25, "JE", 1}, {26, "JNE", 1}};
+                            {24, "JBE", 1}, {25, "JE", 1}, {JNE, "JNE", 1}};
 
 Register_t Registers[] = {{1, "AX"}, {2, "BX"}, {3, "CX"}, {4, "DX"}};
 
@@ -46,7 +57,10 @@ char* GetCodeBuffer(const char* filename);
 
 int MakeCodeFile(const char* filename, char* code_buffer);
 
-int GetArgument(char* lexeme, int registers_count, int last_command, FILE* code_file);
+int GetArgument(char* lexeme, int registers_count, int last_command,
+                Label_t labels[MAX_LABELS_COUNT], int iterating, FILE* code_file);
+
+Set_label_res_t SetLabel(char* lexeme, size_t ip, Label_t labels[MAX_LABELS_COUNT], int iterating);
 
 int GetCommand(char* lexeme, int operations_count, int* p_next_is_argument);
 
@@ -96,40 +110,62 @@ char* GetCodeBuffer(const char* filename) {
 
 
 int MakeCodeFile(const char* filename, char* code_buffer) { // REVIEW split on funk for args and for commands
-    FILE* code_file = fopen(filename, "wb");
+    FILE* code_file = fopen(filename, "wb"); // TODO add return
     if (code_file == NULL) {
         Print_error_message("Failed to open with \"wb\" permission", filename);
         return 1;
     }
 
-    char lexeme[MAX_LEXEME_SIZE] = {};
-    int byte_code = 0;
-    size_t offset = 0;
-    size_t read_symbols_count = 0;
     int registers_count = sizeof(Registers) / sizeof(Register_t);
     int operations_count = sizeof(Operations) / sizeof(Operation_t);
-    int next_is_argument = 0;
-    int last_command = HLT;
 
-    while(sscanf(code_buffer + offset, "%s%n", lexeme, &read_symbols_count) > 0) {
-        offset += read_symbols_count;
+    Label_t labels[MAX_LABELS_COUNT] = {};
+    for (int i = 0; i < MAX_LABELS_COUNT; i++) labels[i].label_position = -1;
 
-        if (next_is_argument > 0) {
-            byte_code = GetArgument(lexeme, registers_count, last_command, code_file);
-            next_is_argument--;
-        }
-        else {
-            byte_code = GetCommand(lexeme, operations_count, &next_is_argument);
-            if (byte_code == UNUSEING_COMMAND_NUMBER) {
-                printf("Unknown command with name %s\n\n", lexeme);
-                fclose(code_file);
-                return 1;
+    for (int iterating = 0; iterating < ITERATING_COUNT; iterating++) {
+        char lexeme[MAX_LEXEME_SIZE] = {};
+        int byte_code = 0;
+        size_t offset = 0;
+        size_t read_symbols_count = 0;
+        size_t ip = 0;
+        int next_is_argument = 0;
+        int last_command = HLT;
+
+        while(sscanf(code_buffer + offset, "%s%n", lexeme, &read_symbols_count) > 0) {
+            offset += read_symbols_count;
+
+            if (next_is_argument > 0) {
+                byte_code = GetArgument(lexeme, registers_count, last_command,
+                                        labels, iterating, code_file);
+                next_is_argument--;
+
+                fwrite(&byte_code, sizeof(int), 1, code_file);
+                ip++;
             }
+            else {
+                if (lexeme[0] == ':') { // TODO labels errors
+                    if (SetLabel(lexeme, ip, labels, iterating) != SET_LABEL_NORMAL) {
+                        fclose(code_file);
+                        return 1;
+                    }
+                }
+                else {
+                    byte_code = GetCommand(lexeme, operations_count, &next_is_argument);
+                    if (byte_code == UNUSEING_COMMAND_NUMBER) {
+                        printf("Unknown command with name %s\n\n", lexeme);
+                        fclose(code_file);
+                        return 1;
+                    }
 
-            last_command = byte_code;
+                    last_command = byte_code;
+
+                    fwrite(&byte_code, sizeof(int), 1, code_file);
+                    ip++;
+                }
+            }
         }
 
-        fwrite(&byte_code, sizeof(int), 1, code_file);
+        fseek(code_file, 0, SEEK_SET);
     }
 
     fclose(code_file);
@@ -137,19 +173,53 @@ int MakeCodeFile(const char* filename, char* code_buffer) { // REVIEW split on f
 }
 
 
-int GetArgument(char* lexeme, int registers_count, int last_command, FILE* code_file) {
+int GetArgument(char* lexeme, int registers_count, int last_command,
+                Label_t labels[MAX_LABELS_COUNT], int iterating, FILE* code_file) {
     for (int i_reg = 0; i_reg < registers_count; i_reg++) {
         if (strncmp(Registers[i_reg].register_name, lexeme, MAX_LEXEME_SIZE) == 0) {
             if (last_command == PUSH) {
                 int byte_code = PUSH_FROM_REGISTER;
-                fseek(code_file, -sizeof(int), SEEK_END);
+                fseek(code_file, -sizeof(int), SEEK_CUR);
                 fwrite(&byte_code, sizeof(int), 1, code_file);
             }
             return Registers[i_reg].register_number;
         }
     }
 
-    return InDigit(lexeme);
+    if (lexeme[0] == ':') {
+        for (int i_lab = 0; (i_lab < MAX_LABELS_COUNT) && (labels[i_lab].label_position >= 0);  i_lab++) {
+            if (strncmp(labels[i_lab].label_name, lexeme, MAX_LEXEME_SIZE) == 0)
+                return labels[i_lab].label_position;
+        }
+
+        return -1;
+    }
+    else
+        return InDigit(lexeme);
+}
+
+
+Set_label_res_t SetLabel (char* lexeme, size_t ip, Label_t labels[MAX_LABELS_COUNT], int iterating) {
+    int i_lab = 0;
+    for (; (i_lab < MAX_LABELS_COUNT) && (labels[i_lab].label_position >= 0);  i_lab++) {
+        if (strncmp(labels[i_lab].label_name, lexeme, MAX_LEXEME_SIZE) == 0) {
+            if (iterating == 0) {
+                printf("Re-identification of label %s\n", lexeme);
+                return SET_LABEL_IDENTIFICATION_ERROR;
+            }
+            if (iterating == 1) return SET_LABEL_NORMAL;
+        }
+    }
+
+    if (i_lab >= MAX_LABELS_COUNT) {
+        printf("assembler.c: not enough memory for label %s, it's max count %d\n", lexeme, MAX_LABELS_COUNT);
+        return SET_LABEL_MEMORY_ERROR;
+    }
+
+    labels[i_lab].label_position = ip;
+    strncpy(labels[i_lab].label_name, lexeme, MAX_LEXEME_SIZE);
+
+    return SET_LABEL_NORMAL;
 }
 
 

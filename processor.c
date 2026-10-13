@@ -14,7 +14,7 @@ enum {MAIN_NORMAL = 0, MAIN_CODE_BUFFER_ERROR = 1,
       MAIN_CODE_SEGMENT_ERROR = 2};                     // return of main()
 
 #define Print_error_message(message, object)                                         \
-    fprintf(stderr, "%s(): %s - %s, line %d\n", __func__, message, object, __LINE__);
+    fprintf(stderr, "%s: %s(): %s - %s, line %d\n", __FILE__, __func__, message, object, __LINE__);
 
 struct Process_t {  // REVIEW struct process
     int* code_segment;
@@ -177,7 +177,7 @@ void ExecuteCommand(Process_t* process) { // TODO binsearch
     }
 
     if (known_command == false) {
-        printf("Unknown command with number %d\n\n", process->code_segment[process->ip]);
+        printf("processor.c: Unknown command with number %d\n\n", process->code_segment[process->ip]);
         Halt(process);
     }
 }
@@ -192,13 +192,13 @@ void ExecuteCommand(Process_t* process) { // TODO binsearch
 void PrintMalfunction(Stack_report_t last_function_success) {
     switch (last_function_success) {
         case OVERFLOW:
-            printf("stack overflow, impossible to memorize number\n");
+            printf("processor.c: stack overflow, impossible to memorize number\n");
             break;
         case VACUUM:
-            printf("stack empty, impossible to get number\n");
+            printf("processor.c: stack empty, impossible to get number\n");
             break;
         case FATAL_ERROR:
-            printf("stack fatal damaged, impossible to work with it\n");
+            printf("processor.c: stack fatal damaged, impossible to work with it\n");
         default: break;
     }
 }
@@ -216,7 +216,7 @@ Stack_report_t Out(Process_t* process) {
     assert(process != NULL);
 
     if (process->numbers_stk->size < 1) {
-        printf("there must be at least one number on stack to execute the command\n");
+        printf("processor.c: there must be at least one number on stack to execute the command\n");
         return VACUUM;
     }
 
@@ -243,7 +243,7 @@ Stack_report_t Add(Process_t* process) { // REVIEW stack errors check
     assert(process != NULL);
 
     if (process->numbers_stk->size < 2) {
-        printf("there must be at least two number on stack to execute the command\n");
+        printf("processor.c: there must be at least two number on stack to execute the command\n");
         return VACUUM;
     }
 
@@ -262,7 +262,7 @@ Stack_report_t Subtract(Process_t* process) {
     assert(process != NULL);
 
     if (process->numbers_stk->size < 2) {
-        printf("there must be at least two number on stack to execute the command\n");
+        printf("processor.c: there must be at least two number on stack to execute the command\n");
         return VACUUM;
     }
 
@@ -281,7 +281,7 @@ Stack_report_t Multiply(Process_t* process) {
     assert(process != NULL);
 
     if (process->numbers_stk->size < 2) {
-        printf("there must be at least two number on stack to execute the command\n");
+        printf("processor.c: there must be at least two number on stack to execute the command\n");
         return VACUUM;
     }
 
@@ -300,7 +300,7 @@ Stack_report_t Divide(Process_t* process) {
     assert(process != NULL);
 
     if (process->numbers_stk->size < 2) {
-        printf("there must be at least two number on stack to execute the command\n");
+        printf("processor.c: there must be at least two number on stack to execute the command\n");
         return VACUUM;
     }
 
@@ -321,7 +321,7 @@ Stack_report_t PushFromRegister(Process_t* process) {
     process->ip++;
 
     if ((process->code_segment[process->ip] < 0) || (process->code_segment[process->ip] >= REGISTERS_COUNT)) {
-        printf("incorrect register number - %d\n", process->code_segment[process->ip]);
+        printf("processor.c: incorrect register number - %d\n", process->code_segment[process->ip]);
         return FATAL_ERROR;
     }
 
@@ -335,7 +335,7 @@ Stack_report_t SetRegister(Process_t* process) {
     assert(process != NULL);
 
     if (process->numbers_stk->size < 1) {
-        printf("there must be at least one number on stack to execute the command\n");
+        printf("processor.c: there must be at least one number on stack to execute the command\n");
         return VACUUM;
     }
 
@@ -345,7 +345,7 @@ Stack_report_t SetRegister(Process_t* process) {
     process->ip++;
 
     if ((process->code_segment[process->ip] < 0) || (process->code_segment[process->ip] >= REGISTERS_COUNT)) {
-        printf("incorrect register number %d\n", process->code_segment[process->ip]);
+        printf("processor.c: incorrect register number %d\n", process->code_segment[process->ip]);
         return FATAL_ERROR;
     }
 
@@ -360,7 +360,7 @@ Stack_report_t Jump(Process_t* process) { // STUB macros
     process->ip++;
 
     if (process->code_segment[process->ip] < 0) {
-        printf("incorrect label %d\n", process->code_segment[process->ip]);
+        printf("processor.c: incorrect label %d\n", process->code_segment[process->ip]);
         return FATAL_ERROR;
     }
 
@@ -373,7 +373,7 @@ Stack_report_t JumpAbove(Process_t* process) {
     assert(process != NULL);
 
     if (process->numbers_stk->size < 2) {
-        printf("there must be at least two number on stack to execute the command\n");
+        printf("processor.c: there must be at least two number on stack to execute the command\n");
         return VACUUM;
     }
 
@@ -394,7 +394,7 @@ Stack_report_t JumpEqualAbove(Process_t* process) {
     assert(process != NULL);
 
     if (process->numbers_stk->size < 2) {
-        printf("there must be at least two number on stack to execute the command\n");
+        printf("processor.c: there must be at least two number on stack to execute the command\n");
         return VACUUM;
     }
 
@@ -415,7 +415,7 @@ Stack_report_t JumpBelow(Process_t* process) {
     assert(process != NULL);
 
     if (process->numbers_stk->size < 2) {
-        printf("there must be at least two number on stack to execute the command\n");
+        printf("processor.c: there must be at least two number on stack to execute the command\n");
         return VACUUM;
     }
 
@@ -436,7 +436,7 @@ Stack_report_t JumpEqualBelow(Process_t* process) {
     assert(process != NULL);
 
     if (process->numbers_stk->size < 2) {
-        printf("there must be at least two number on stack to execute the command\n");
+        printf("processor.c: there must be at least two number on stack to execute the command\n");
         return VACUUM;
     }
 
@@ -457,7 +457,7 @@ Stack_report_t JumpEqual(Process_t* process) {
     assert(process != NULL);
 
     if (process->numbers_stk->size < 2) {
-        printf("there must be at least two number on stack to execute the command\n");
+        printf("processor.c: there must be at least two number on stack to execute the command\n");
         return VACUUM;
     }
 
@@ -478,7 +478,7 @@ Stack_report_t JumpNotEqual(Process_t* process) {
     assert(process != NULL);
 
     if (process->numbers_stk->size < 2) {
-        printf("there must be at least two number on stack to execute the command\n");
+        printf("processor.c: there must be at least two number on stack to execute the command\n");
         return VACUUM;
     }
 
