@@ -1,6 +1,6 @@
-#include "asm.h" // TODO .h file
+#include "asm.h" // REVIEW .h file
 
-#define DEFAULT_TEXT_FILE_NAME "text_commands.txt"
+#define DEFAULT_TEXT_FILE_NAME "code.txt"
 #define DEFAULT_CODE_FILE_NAME "code.bin"
 #define MAX_LABELS_COUNT 100
 #define UNUSEING_COMMAND_NUMBER -67
@@ -22,7 +22,7 @@ struct Label_t {
     char label_name[MAX_LEXEME_SIZE];
 };
 
-char* GetCodeBuffer(const char* filename);
+char* GetCodeBuffer(const char* filename); // FIXME get double arguments
 
 int MakeCodeFile(const char* filename, char* code_buffer);
 
@@ -125,7 +125,7 @@ int MakeCodeFile(const char* filename, char* code_buffer) { // REVIEW split on f
             else {
                 if (lexeme[0] == ':') { // TODO labels errors
                     if (SetLabel(lexeme, ip, labels, iterating) != SET_LABEL_NORMAL) {
-                        printf("Impossible to se label with name %s\n\n", lexeme);
+                        printf("assembler.c: impossible to se label with name %s\n\n", lexeme);
                         fclose(code_file);
                         return 1;
                     }
@@ -133,7 +133,7 @@ int MakeCodeFile(const char* filename, char* code_buffer) { // REVIEW split on f
                 else {
                     byte_code = GetCommand(lexeme, operations_count, &next_is_argument);
                     if (byte_code == UNUSEING_COMMAND_NUMBER) {
-                        printf("Unknown command with name %s\n\n", lexeme);
+                        printf("assembler.c: unknown command with name %s\n\n", lexeme);
                         fclose(code_file);
                         return 1;
                     }
@@ -185,7 +185,7 @@ Set_label_res_t SetLabel (char* lexeme, size_t ip, Label_t labels[MAX_LABELS_COU
     for (; (i_lab < MAX_LABELS_COUNT) && (labels[i_lab].label_position >= 0);  i_lab++) {
         if (strncmp(labels[i_lab].label_name, lexeme, MAX_LEXEME_SIZE) == 0) {
             if (iterating == 0) {
-                printf("Re-identification of label %s\n", lexeme);
+                printf("assembler.c: re-identification of label %s\n", lexeme);
                 return SET_LABEL_IDENTIFICATION_ERROR;
             }
             if (iterating == 1) return SET_LABEL_NORMAL;

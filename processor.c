@@ -3,12 +3,13 @@
 #include <assert.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <ctype.h>    // TODO calc type (double or int) or use already done STACK_TYPE or equal it for understanding
+#include <ctype.h>
 
 #include "Stack.c"
 
 #define DEFAULT_CODE_FILE_NAME "code.bin"
 #define REGISTERS_COUNT 5
+#define ACCURACY 1000
 
 enum {MAIN_NORMAL = 0, MAIN_CODE_BUFFER_ERROR = 1,
       MAIN_CODE_SEGMENT_ERROR = 2};                     // return of main()
@@ -54,6 +55,8 @@ Stack_report_t Multiply(Process_t* process);
 
 Stack_report_t Divide(Process_t* process);
 
+Stack_report_t Sqrt(Process_t* process);
+
 Stack_report_t PushFromRegister(Process_t* process);
 
 Stack_report_t SetRegister(Process_t* process);
@@ -76,13 +79,17 @@ Stack_report_t Call(Process_t* process);
 
 Stack_report_t Back(Process_t* process);
 
+Stack_report_t Input(Process_t* process);
+
 static Command_t Commands[] = {
     {-2, "HLT", &Halt}, {-1, "OUT", &Out}, {0, "PUSH", &Push},
     {1, "ADD", &Add}, {2, "SUB", &Subtract}, {3, "MUL", &Multiply}, {4, "DIV", &Divide},
+    {5, "SQRT", &Sqrt},
     {10, "PUSH", &PushFromRegister}, {11, "SET", &SetRegister}, {20, "JUMP", &Jump},
     {21, "JA", &JumpAbove}, {22, "JAE", &JumpEqualAbove}, {23, "JB", &JumpBelow},
     {24, "JBE", &JumpEqualBelow}, {25, "JE", &JumpEqual}, {26, "JNE", &JumpNotEqual},
-    {30, "CALL", &Call}, {31, "RET", &Back}
+    {30, "CALL", &Call}, {31, "RET", &Back},
+    {50, "IN", &Input}
 };
 
 
@@ -182,8 +189,8 @@ void ExecuteCommand(Process_t* process) { // TODO binsearch
 
             Stack_report_t last_command_success = Commands[i_cmd].CommandAction(process);
             if (last_command_success != SUCCESS) {
-                printf("the command %s failed with code %d\n\n",
-                       Commands[i_cmd].command_name, last_command_success);
+                printf("ip %d the command %s failed with code %d\n\n",
+                       process->ip, Commands[i_cmd].command_name, last_command_success);
                 Halt(process); // STUB
             }
 
@@ -238,7 +245,7 @@ Stack_report_t Out(Process_t* process) {
     int a = StackPop(process->numbers_stk);
     CHECK_SUCCESS(process->numbers_stk);
 
-    printf("< %d >\n", a);
+    printf("< %.3lf >\n", (double)a / ACCURACY);
 
     return SUCCESS;
 }
@@ -248,7 +255,7 @@ Stack_report_t Push(Process_t* process) {
 
     process->ip++;
 
-    StackPush(process->numbers_stk, process->code_segment[process->ip]);
+    StackPush(process->numbers_stk, process->code_segment[process->ip] * ACCURACY);
     CHECK_SUCCESS(process->numbers_stk);
 
     return SUCCESS;
@@ -305,7 +312,7 @@ Stack_report_t Multiply(Process_t* process) {
     int b = StackPop(process->numbers_stk);
     CHECK_SUCCESS(process->numbers_stk);
 
-    StackPush(process->numbers_stk, a * b);
+    StackPush(process->numbers_stk, a * b / ACCURACY);
     CHECK_SUCCESS(process->numbers_stk);
 
     return SUCCESS;
@@ -324,7 +331,24 @@ Stack_report_t Divide(Process_t* process) {
     int b = StackPop(process->numbers_stk);
     CHECK_SUCCESS(process->numbers_stk);
 
-    StackPush(process->numbers_stk, b / a);
+    StackPush(process->numbers_stk, (double)b / (double)a * ACCURACY);
+    CHECK_SUCCESS(process->numbers_stk);
+
+    return SUCCESS;
+}
+
+Stack_report_t Sqrt(Process_t* process) {
+    assert(process != NULL);
+
+    if (process->numbers_stk->size < 1) {
+        printf("processor.c: there must be at least one number on stack to execute the command\n");
+        return VACUUM;
+    }
+
+    int a = StackPop(process->numbers_stk);
+    CHECK_SUCCESS(process->numbers_stk);
+
+    StackPush(process->numbers_stk, (int)(sqrt((double)a / ACCURACY) * ACCURACY));
     CHECK_SUCCESS(process->numbers_stk);
 
     return SUCCESS;
@@ -392,12 +416,12 @@ Stack_report_t JumpAbove(Process_t* process) {
         return VACUUM;
     }
 
-    int a = StackPop(process->numbers_stk);
-    CHECK_SUCCESS(process->numbers_stk);
     int b = StackPop(process->numbers_stk);
     CHECK_SUCCESS(process->numbers_stk);
+    int a = StackPop(process->numbers_stk);
+    CHECK_SUCCESS(process->numbers_stk);
 
-    if (b < a)
+    if (a > b)
         return Jump(process);
 
     process->ip++; // skip argument of Jump
@@ -413,12 +437,12 @@ Stack_report_t JumpEqualAbove(Process_t* process) {
         return VACUUM;
     }
 
-    int a = StackPop(process->numbers_stk);
-    CHECK_SUCCESS(process->numbers_stk);
     int b = StackPop(process->numbers_stk);
     CHECK_SUCCESS(process->numbers_stk);
+    int a = StackPop(process->numbers_stk);
+    CHECK_SUCCESS(process->numbers_stk);
 
-    if (b <= a)
+    if (a >= b)
         return Jump(process);
 
     process->ip++; // skip argument of Jump
@@ -434,12 +458,12 @@ Stack_report_t JumpBelow(Process_t* process) {
         return VACUUM;
     }
 
-    int a = StackPop(process->numbers_stk);
-    CHECK_SUCCESS(process->numbers_stk);
     int b = StackPop(process->numbers_stk);
     CHECK_SUCCESS(process->numbers_stk);
+    int a = StackPop(process->numbers_stk);
+    CHECK_SUCCESS(process->numbers_stk);
 
-    if (b > a)
+    if (a < b)
         return Jump(process);
 
     process->ip++; // skip argument of Jump
@@ -455,12 +479,12 @@ Stack_report_t JumpEqualBelow(Process_t* process) {
         return VACUUM;
     }
 
-    int a = StackPop(process->numbers_stk);
-    CHECK_SUCCESS(process->numbers_stk);
     int b = StackPop(process->numbers_stk);
     CHECK_SUCCESS(process->numbers_stk);
+    int a = StackPop(process->numbers_stk);
+    CHECK_SUCCESS(process->numbers_stk);
 
-    if (b >= a)
+    if (a <= b)
         return Jump(process);
 
     process->ip++; // skip argument of Jump
@@ -476,12 +500,12 @@ Stack_report_t JumpEqual(Process_t* process) {
         return VACUUM;
     }
 
-    int a = StackPop(process->numbers_stk);
-    CHECK_SUCCESS(process->numbers_stk);
     int b = StackPop(process->numbers_stk);
     CHECK_SUCCESS(process->numbers_stk);
+    int a = StackPop(process->numbers_stk);
+    CHECK_SUCCESS(process->numbers_stk);
 
-    if (b == a)
+    if (a == b)
         return Jump(process);
 
     process->ip++; // skip argument of Jump
@@ -497,12 +521,12 @@ Stack_report_t JumpNotEqual(Process_t* process) {
         return VACUUM;
     }
 
-    int a = StackPop(process->numbers_stk);
-    CHECK_SUCCESS(process->numbers_stk);
     int b = StackPop(process->numbers_stk);
     CHECK_SUCCESS(process->numbers_stk);
+    int a = StackPop(process->numbers_stk);
+    CHECK_SUCCESS(process->numbers_stk);
 
-    if (b != a)
+    if (a != b)
         return Jump(process);
 
     process->ip++; // skip argument of Jump
@@ -545,6 +569,17 @@ Stack_report_t Back(Process_t* process) {
     }
 
     process->ip = back_ip - 1; // -1 to compensate ip++
+
+    return SUCCESS;
+}
+
+Stack_report_t Input(Process_t* process) {
+    double a = NAN;
+
+    scanf("%lf", &a);
+
+    StackPush(process->numbers_stk, (int)(a  * ACCURACY));
+    CHECK_SUCCESS(process->numbers_stk);
 
     return SUCCESS;
 }

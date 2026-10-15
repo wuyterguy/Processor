@@ -106,7 +106,7 @@ int DisassembleCode(int* code_segment, const char* filename) { // TODO binsearch
                 }
                 fprintf(text_file, "\n");
 
-                if (code_segment[ip] == HLT) {
+                if (code_segment[ip] == HLT) { //FIXME
                     fclose(text_file);
                     return 0;
                 }

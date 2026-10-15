@@ -1,0 +1,42 @@
+PUSH 0
+SET CX
+PUSH 20
+SET DX
+
+PUSH 0
+OUT
+PUSH 1
+OUT
+
+PUSH 0
+PUSH 1
+
+CALL :Fibonacci
+HLT
+
+:Fibonacci
+PUSH CX
+PUSH DX
+JAE :end
+
+SET AX
+PUSH AX
+
+ADD
+SET BX
+
+PUSH AX
+PUSH BX
+
+OUT
+PUSH BX
+
+PUSH CX
+PUSH 1
+ADD
+SET CX
+
+CALL :Fibonacci
+
+:end
+RET

@@ -1,0 +1,98 @@
+IN
+SET AX
+IN
+SET BX
+IN
+SET CX
+
+PUSH AX
+PUSH 0
+JE :true_a
+JUMP :false_a
+
+:true_a
+    PUSH BX
+    PUSH 0
+    JNE :true_b
+    JUMP :endif_b
+
+    :true_b
+        PUSH 0
+        PUSH CX
+        SUB
+        PUSH BX
+        DIV
+        OUT
+
+        HLT
+    JUMP :endif_b
+
+    :endif_b
+JUMP :endif_a
+
+:false_a
+    PUSH BX
+    PUSH BX
+    MUL
+    PUSH AX
+    PUSH CX
+    MUL
+    PUSH 4
+    MUL
+    SUB
+    SET DX
+
+    PUSH DX
+    PUSH 0
+    JA :two_roots
+    PUSH DX
+    PUSH 0
+    JE :one_root
+    JUMP :endif_d
+
+    :two_roots
+        PUSH 0
+        PUSH BX
+        SUB
+        PUSH DX
+        SQRT
+        ADD
+        PUSH 2
+        PUSH AX
+        MUL
+        DIV
+        OUT
+
+        PUSH 0
+        PUSH BX
+        SUB
+        PUSH DX
+        SQRT
+        SUB
+        PUSH 2
+        PUSH AX
+        MUL
+        DIV
+        OUT
+
+        HLT
+    JUMP :endif_d
+
+    :one_root
+        PUSH 0
+        PUSH BX
+        SUB
+        PUSH 2
+        PUSH AX
+        MUL
+        DIV
+        OUT
+
+        HLT
+    JUMP :endif_d
+
+    :endif_d
+JUMP :endif_a
+
+:endif_a
+HLT
