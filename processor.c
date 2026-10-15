@@ -20,7 +20,8 @@ struct Process_t {  // REVIEW struct process
     int* code_segment;
     int ip;
     Stack_t* numbers_stk;
-    int registers[REGISTERS_COUNT];  // REVIEW register
+    int registers[REGISTERS_COUNT] = {};  // REVIEW register
+    Stack_t* functions_back_ip_stk;
 };
 
 struct Command_t {
@@ -37,7 +38,7 @@ int* GetCodeSegment(const char* filename);
 
 void ExecuteCommand(Process_t* process); // STUB add &result field for OUT and some new functions
 
-void PrintMalfunction(Stack_report_t last_function_success);
+void PrintMalfunction(Stack_report_t last_function_success, const char* function_name);
 
 Stack_report_t Halt(Process_t* process);
 
@@ -71,12 +72,17 @@ Stack_report_t JumpEqual(Process_t* process);
 
 Stack_report_t JumpNotEqual(Process_t* process);
 
+Stack_report_t Call(Process_t* process);
+
+Stack_report_t Back(Process_t* process);
+
 static Command_t Commands[] = {
     {-2, "HLT", &Halt}, {-1, "OUT", &Out}, {0, "PUSH", &Push},
     {1, "ADD", &Add}, {2, "SUB", &Subtract}, {3, "MUL", &Multiply}, {4, "DIV", &Divide},
     {10, "PUSH", &PushFromRegister}, {11, "SET", &SetRegister}, {20, "JUMP", &Jump},
     {21, "JA", &JumpAbove}, {22, "JAE", &JumpEqualAbove}, {23, "JB", &JumpBelow},
-    {24, "JBE", &JumpEqualBelow}, {25, "JE", &JumpEqual}, {26, "JNE", &JumpNotEqual}
+    {24, "JBE", &JumpEqualBelow}, {25, "JE", &JumpEqual}, {26, "JNE", &JumpNotEqual},
+    {30, "CALL", &Call}, {31, "RET", &Back}
 };
 
 
@@ -113,6 +119,12 @@ Process_t* ProcessInit(const char* filename) {
         return NULL;
     }
 
+    process->functions_back_ip_stk = StackInit(0);
+    if (process->functions_back_ip_stk->error != STACK_NORMAL) {
+        free(process->code_segment); free(process); StackDestroy(process->numbers_stk);
+        return NULL;
+    }
+
     return process;
 }
 
@@ -120,6 +132,7 @@ Process_t* ProcessInit(const char* filename) {
 void ProcessDestroy(Process_t* process) {
     free(process->code_segment);
     StackDestroy(process->numbers_stk);
+    StackDestroy(process->functions_back_ip_stk);
     free(process);
 }
 
@@ -165,6 +178,8 @@ void ExecuteCommand(Process_t* process) { // TODO binsearch
         if (Commands[i_cmd].command_number == process->code_segment[process->ip]) {
             known_command = true;
 
+            //printf("%s\n", Commands[i_cmd].command_name);
+
             Stack_report_t last_command_success = Commands[i_cmd].CommandAction(process);
             if (last_command_success != SUCCESS) {
                 printf("the command %s failed with code %d\n\n",
@@ -183,22 +198,22 @@ void ExecuteCommand(Process_t* process) { // TODO binsearch
 }
 
 
-#define CHECK_SUCCESS(stack)                           \
-    if (stack->last_function_success != SUCCESS) {     \
-        PrintMalfunction(stack->last_function_success);\
-        return stack->last_function_success;           \
+#define CHECK_SUCCESS(stack)                                     \
+    if (stack->last_function_success != SUCCESS) {               \
+        PrintMalfunction(stack->last_function_success, __func__);\
+        return stack->last_function_success;                     \
     }
 
-void PrintMalfunction(Stack_report_t last_function_success) {
+void PrintMalfunction(Stack_report_t last_function_success, const char* function_name) {
     switch (last_function_success) {
         case OVERFLOW:
-            printf("processor.c: stack overflow, impossible to memorize number\n");
+            printf("processor.c: %s(): stack overflow, impossible to memorize number\n", function_name);
             break;
         case VACUUM:
-            printf("processor.c: stack empty, impossible to get number\n");
+            printf("processor.c: %s(): stack empty, impossible to get number\n", function_name);
             break;
         case FATAL_ERROR:
-            printf("processor.c: stack fatal damaged, impossible to work with it\n");
+            printf("processor.c: %s(): stack fatal damaged, impossible to work with it\n", function_name);
         default: break;
     }
 }
@@ -491,6 +506,45 @@ Stack_report_t JumpNotEqual(Process_t* process) {
         return Jump(process);
 
     process->ip++; // skip argument of Jump
+
+    return SUCCESS;
+}
+
+Stack_report_t Call(Process_t* process) {
+    assert(process != NULL);
+
+    process->ip++;
+
+    StackPush(process->functions_back_ip_stk, process->ip + 1);
+    CHECK_SUCCESS(process->functions_back_ip_stk);
+
+    if (process->code_segment[process->ip] < 0) {
+        printf("processor.c: incorrect label %d\n", process->code_segment[process->ip]);
+        return FATAL_ERROR;
+    }
+
+    process->ip = (process->code_segment[process->ip] - 1); // -1 to compensate ip++
+
+    return SUCCESS;
+}
+
+Stack_report_t Back(Process_t* process) {
+    assert(process != NULL);
+
+    if (process->functions_back_ip_stk->size < 1) {
+        printf("processor.c: there must be at least one number on functions back ip stack to execute the command\n");
+        return VACUUM;
+    }
+
+    int back_ip = StackPop(process->functions_back_ip_stk);
+    CHECK_SUCCESS(process->functions_back_ip_stk);
+
+    if (process->code_segment[process->ip] < 0) {
+        printf("processor.c: incorrect label %d\n", process->code_segment[process->ip]);
+        return FATAL_ERROR;
+    }
+
+    process->ip = back_ip - 1; // -1 to compensate ip++
 
     return SUCCESS;
 }

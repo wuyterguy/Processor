@@ -1,57 +1,26 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <ctype.h>
-#include <string.h>
+#include "asm.h" // TODO .h file
 
-#define MAX_LEXEME_SIZE 100
+#define DEFAULT_TEXT_FILE_NAME "text_commands.txt"
+#define DEFAULT_CODE_FILE_NAME "code.bin"
 #define MAX_LABELS_COUNT 100
 #define UNUSEING_COMMAND_NUMBER -67
 #define ITERATING_COUNT 2
-
-#define HLT -2
-#define PUSH 0
-#define PUSH_FROM_REGISTER 10
-#define JUMP 20
-#define JNE 26
 
 //#define COMMAND_SIZE = sizeof(int)
 //#define ARGUMENT_SIZE = sizeof(double)
 //#define ARGUMENT_SPECIFIER = "%d"
 
-enum {MAIN_NORMAL = 0, MAIN_CODE_BUFFER_ERROR = 1,
-      MAIN_CODE_SEGMENT_ERROR = 2};                            // return of main()
+enum {MAIN_NORMAL = 0, MAIN_CODE_BUFFER_ERROR = 1};            // return of main()
 typedef enum {SET_LABEL_NORMAL = 0, SET_LABEL_MEMORY_ERROR = 1,
               SET_LABEL_IDENTIFICATION_ERROR} Set_label_res_t; // return of SetLabel()
 
 #define Print_error_message(message, object)                                         \
     fprintf(stderr, "%s: %s(): %s - %s, line %d\n", __FILE__, __func__, message, object, __LINE__);
 
-struct Operation_t {
-    int operation_number;
-    const char operation_name[MAX_LEXEME_SIZE];
-    int arguments_count;
-};
-
-struct Register_t {
-    int register_number;
-    const char register_name[MAX_LEXEME_SIZE];
-};
-
 struct Label_t {
     ssize_t label_position;
     char label_name[MAX_LEXEME_SIZE];
 };
-
-Operation_t Operations[] = {{HLT /*-2*/, "HLT", 0}, {-1, "OUT", 0}, {PUSH /*0*/, "PUSH", 1},
-                            {1, "ADD", 0}, {2, "SUB", 0}, {3, "MUL", 0}, {4, "DIV", 0},
-                            /*{PUSH_FROM_REGISTER, "PUSH", 1},*/ {11, "SET", 1}, {JUMP, "JUMP", 1},
-                            {21, "JA", 1}, {22, "JAE", 1}, {23, "JB", 1},
-                            {24, "JBE", 1}, {25, "JE", 1}, {JNE, "JNE", 1}};
-
-Register_t Registers[] = {{1, "AX"}, {2, "BX"}, {3, "CX"}, {4, "DX"}};
 
 char* GetCodeBuffer(const char* filename);
 
@@ -66,12 +35,23 @@ int GetCommand(char* lexeme, int operations_count, int* p_next_is_argument);
 
 int InDigit(char* lexeme);
 
-int main() {
-    char* code_buffer = GetCodeBuffer("text_commands.txt");  // TODO get filename from argv or use console
+int main(int argc, char* argv[]) {
+    const char* text_file_name = NULL;
+    const char* code_file_name = NULL;
+    if (argc >= 3) {
+        text_file_name = argv[1];
+        code_file_name = argv[2];
+    }
+    else {
+        text_file_name = DEFAULT_TEXT_FILE_NAME;
+        code_file_name = DEFAULT_CODE_FILE_NAME;
+    }
+
+    char* code_buffer = GetCodeBuffer(text_file_name);
     if (code_buffer == NULL)
         return MAIN_CODE_BUFFER_ERROR;
 
-    int make_code_res = MakeCodeFile("code.bin", code_buffer);
+    int make_code_res = MakeCodeFile(code_file_name, code_buffer);
 }
 
 
@@ -145,6 +125,7 @@ int MakeCodeFile(const char* filename, char* code_buffer) { // REVIEW split on f
             else {
                 if (lexeme[0] == ':') { // TODO labels errors
                     if (SetLabel(lexeme, ip, labels, iterating) != SET_LABEL_NORMAL) {
+                        printf("Impossible to se label with name %s\n\n", lexeme);
                         fclose(code_file);
                         return 1;
                     }
